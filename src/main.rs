@@ -20,6 +20,7 @@ enum PdfSettings {
     Screen,
     Ebook,
     Printer,
+    Prepress,
 }
 
 impl std::fmt::Display for PdfSettings {
@@ -29,6 +30,7 @@ impl std::fmt::Display for PdfSettings {
             PdfSettings::Screen => write!(f, "screen"),
             PdfSettings::Ebook => write!(f, "ebook"),
             PdfSettings::Printer => write!(f, "printer"),
+            PdfSettings::Prepress => write!(f, "prepress"),
         }
     }
 }
@@ -46,8 +48,8 @@ impl Default for MyApp {
         Self {
             picked_path: None,
             output_path: None,
-            pdf_settings: PdfSettings::Default,
-            image_dpi: 200,
+            pdf_settings: PdfSettings::Screen,
+            image_dpi: 150,
             compression_complete: false,
         }
     }
@@ -60,7 +62,7 @@ impl eframe::App for MyApp {
             ui.add_space(10.0);
 
             ui.label("Image DPI:");
-            ui.add(egui::Slider::new(&mut self.image_dpi, 0..=500));
+            ui.add(egui::Slider::new(&mut self.image_dpi, 10..=300).step_by(10.0));
 
             ui.add_space(10.0);
 
@@ -70,6 +72,7 @@ impl eframe::App for MyApp {
                 ui.selectable_value(&mut self.pdf_settings, PdfSettings::Screen, "screen");
                 ui.selectable_value(&mut self.pdf_settings, PdfSettings::Ebook, "ebook");
                 ui.selectable_value(&mut self.pdf_settings, PdfSettings::Printer, "printer");
+                ui.selectable_value(&mut self.pdf_settings, PdfSettings::Prepress, "prepress");
             });
 
             ui.add_space(10.0);
@@ -133,20 +136,33 @@ fn run(
     pdf_settings: &PdfSettings,
     compression_complete: &mut bool,
 ) {
-    let child = Command::new("gs")
+    // Some options: https://gist.github.com/ahmed-musallam/27de7d7c5ac68ecbd1ed65b6b48416f9
+
+    #[cfg(target_os = "linux")]
+    let command = "gs";
+
+    #[cfg(target_os = "windows")]
+    let command = "gswin64";
+
+    let child = Command::new(command)
         .arg("-dBATCH")
         .arg("-dNOPAUSE")
         // .arg("-q")
         .arg("-dCompatibilityLevel=1.4")
         .arg(format!("-dPDFSETTINGS=/{pdf_settings}"))
         .arg("-dCompressFonts=true")
-        .arg("-dDetectDuplicateImages=true")
+        .arg("-dEmbedAllFonts=true")
+        .arg("-dSubsetFonts=true")
+        // .arg("-dDetectDuplicateImages=true")
         // .arg("-dDownsampleColorImages=true")
         // .arg("-dDownsampleGrayImages=true")
         // .arg("-dDownsampleMonoImages=true")
-        // .arg("-dColorImageResolution=150")
-        // .arg("-dGrayImageResolution=150")
-        // .arg("-dMonoImageResolution=150")
+        // .arg("-dColorImageDownsampleType=/Bicubic")
+        // .arg("-dGrayImageDownsampleType=/Bicubic")
+        // .arg("-dMonoImageDownsampleType=/Bicubic")
+        .arg(format!("-dColorImageResolution={image_resolution}"))
+        .arg(format!("-dGrayImageResolution={image_resolution}"))
+        .arg(format!("-dMonoImageResolution={image_resolution}"))
         .arg(format!("-r{image_resolution}"))
         .arg("-sDEVICE=pdfwrite")
         .arg(format!("-sOutputFile={output_path}"))
