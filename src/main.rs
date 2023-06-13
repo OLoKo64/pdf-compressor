@@ -1,5 +1,8 @@
 use eframe::egui;
-use std::process::Command;
+use std::{
+    process::Command,
+    sync::{Arc, RwLock},
+};
 
 #[cfg(target_os = "linux")]
 const COMMAND: &str = "gs";
@@ -20,7 +23,7 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum PdfSettings {
     Default,
     Screen,
@@ -46,7 +49,8 @@ struct MyApp {
     output_path: Option<String>,
     pdf_settings: PdfSettings,
     image_dpi: u16,
-    compression_complete: bool,
+    is_processing: Arc<RwLock<bool>>,
+    compression_complete: Arc<RwLock<bool>>,
 }
 
 impl Default for MyApp {
@@ -56,7 +60,8 @@ impl Default for MyApp {
             output_path: None,
             pdf_settings: PdfSettings::Screen,
             image_dpi: 150,
-            compression_complete: false,
+            is_processing: Arc::new(RwLock::new(false)),
+            compression_complete: Arc::new(RwLock::new(false)),
         }
     }
 }
@@ -96,11 +101,14 @@ impl eframe::App for MyApp {
                     self.picked_path = Some(path.display().to_string());
                     self.output_path = Some(output_path.display().to_string());
 
-                    self.compression_complete = false;
+                    let mut lock = self.compression_complete.write().unwrap();
+                    *lock = false;
                 }
             }
 
+            ui.add_space(5.0);
             ui.separator();
+            ui.add_space(5.0);
 
             if let Some(picked_path) = &self.picked_path {
                 ui.horizontal(|ui| {
@@ -115,19 +123,32 @@ impl eframe::App for MyApp {
 
                 ui.add_space(10.0);
 
-                if ui.button("Compress PDF").clicked() {
+                if *self.is_processing.read().unwrap() {
+                    ui.horizontal(|ui| {
+                        ui.label("Compressing…");
+                        ui.spinner();
+                    });
+                } else if ui.button("Compress PDF").clicked() {
+                    let mut is_processing = self.is_processing.write().unwrap();
+                    *is_processing = true;
+                    let mut compression_complete = self.compression_complete.write().unwrap();
+                    *compression_complete = false;
+                    drop(is_processing);
+                    drop(compression_complete);
+
                     run(
-                        picked_path,
-                        self.output_path.as_deref().unwrap(),
+                        picked_path.to_string(),
+                        self.output_path.as_ref().unwrap().clone(),
                         self.image_dpi,
-                        &self.pdf_settings,
-                        &mut self.compression_complete,
+                        self.pdf_settings.clone(),
+                        Arc::clone(&self.is_processing),
+                        Arc::clone(&self.compression_complete),
                     );
                 }
 
                 ui.add_space(10.0);
 
-                if self.compression_complete {
+                if *self.compression_complete.read().unwrap() {
                     ui.heading("Compression complete!");
                 }
             }
@@ -136,40 +157,47 @@ impl eframe::App for MyApp {
 }
 
 fn run(
-    file_path: &str,
-    output_path: &str,
+    file_path: String,
+    output_path: String,
     image_resolution: u16,
-    pdf_settings: &PdfSettings,
-    compression_complete: &mut bool,
+    pdf_settings: PdfSettings,
+    is_processing: Arc<RwLock<bool>>,
+    compression_complete: Arc<RwLock<bool>>,
 ) {
     // Some options: https://gist.github.com/ahmed-musallam/27de7d7c5ac68ecbd1ed65b6b48416f9
 
-    let child = Command::new(COMMAND)
-        .arg("-dBATCH")
-        .arg("-dNOPAUSE")
-        // .arg("-q")
-        .arg("-dCompatibilityLevel=1.4")
-        .arg(format!("-dPDFSETTINGS=/{pdf_settings}"))
-        .arg("-dCompressFonts=true")
-        .arg("-dEmbedAllFonts=true")
-        .arg("-dSubsetFonts=true")
-        // .arg("-dDetectDuplicateImages=true")
-        // .arg("-dDownsampleColorImages=true")
-        // .arg("-dDownsampleGrayImages=true")
-        // .arg("-dDownsampleMonoImages=true")
-        // .arg("-dColorImageDownsampleType=/Bicubic")
-        // .arg("-dGrayImageDownsampleType=/Bicubic")
-        // .arg("-dMonoImageDownsampleType=/Bicubic")
-        .arg(format!("-dColorImageResolution={image_resolution}"))
-        .arg(format!("-dGrayImageResolution={image_resolution}"))
-        .arg(format!("-dMonoImageResolution={image_resolution}"))
-        .arg(format!("-r{image_resolution}"))
-        .arg("-sDEVICE=pdfwrite")
-        .arg(format!("-sOutputFile={output_path}"))
-        .arg(file_path)
-        .spawn();
+    std::thread::spawn(move || {
+        let child = Command::new(COMMAND)
+            .arg("-dBATCH")
+            .arg("-dNOPAUSE")
+            // .arg("-q")
+            .arg("-dCompatibilityLevel=1.4")
+            .arg(format!("-dPDFSETTINGS=/{pdf_settings}"))
+            .arg("-dCompressFonts=true")
+            .arg("-dEmbedAllFonts=true")
+            .arg("-dSubsetFonts=true")
+            // .arg("-dDetectDuplicateImages=true")
+            // .arg("-dDownsampleColorImages=true")
+            // .arg("-dDownsampleGrayImages=true")
+            // .arg("-dDownsampleMonoImages=true")
+            // .arg("-dColorImageDownsampleType=/Bicubic")
+            // .arg("-dGrayImageDownsampleType=/Bicubic")
+            // .arg("-dMonoImageDownsampleType=/Bicubic")
+            .arg(format!("-dColorImageResolution={image_resolution}"))
+            .arg(format!("-dGrayImageResolution={image_resolution}"))
+            .arg(format!("-dMonoImageResolution={image_resolution}"))
+            .arg(format!("-r{image_resolution}"))
+            .arg("-sDEVICE=pdfwrite")
+            .arg(format!("-sOutputFile={output_path}"))
+            .arg(file_path)
+            .spawn();
 
-    child.unwrap().wait().unwrap();
+        child.unwrap().wait().unwrap();
 
-    *compression_complete = true;
+        let mut compression_complete = compression_complete.write().unwrap();
+        *compression_complete = true;
+
+        let mut is_processing = is_processing.write().unwrap();
+        *is_processing = false;
+    });
 }
