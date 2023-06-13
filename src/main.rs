@@ -38,6 +38,7 @@ struct MyApp {
     output_path: Option<String>,
     pdf_settings: PdfSettings,
     image_dpi: u16,
+    compression_complete: bool,
 }
 
 impl Default for MyApp {
@@ -47,6 +48,7 @@ impl Default for MyApp {
             output_path: None,
             pdf_settings: PdfSettings::Default,
             image_dpi: 200,
+            compression_complete: false,
         }
     }
 }
@@ -84,6 +86,8 @@ impl eframe::App for MyApp {
 
                     self.picked_path = Some(path.display().to_string());
                     self.output_path = Some(output_path.display().to_string());
+
+                    self.compression_complete = false;
                 }
             }
 
@@ -108,14 +112,27 @@ impl eframe::App for MyApp {
                         self.output_path.as_deref().unwrap(),
                         self.image_dpi,
                         &self.pdf_settings,
+                        &mut self.compression_complete,
                     );
+                }
+
+                ui.add_space(10.0);
+
+                if self.compression_complete {
+                    ui.heading("Compression complete!");
                 }
             }
         });
     }
 }
 
-fn run(file_path: &str, output_path: &str, image_resolution: u16, pdf_settings: &PdfSettings) {
+fn run(
+    file_path: &str,
+    output_path: &str,
+    image_resolution: u16,
+    pdf_settings: &PdfSettings,
+    compression_complete: &mut bool,
+) {
     let child = Command::new("gs")
         .arg("-dBATCH")
         .arg("-dNOPAUSE")
@@ -133,8 +150,10 @@ fn run(file_path: &str, output_path: &str, image_resolution: u16, pdf_settings: 
         .arg(format!("-r{image_resolution}"))
         .arg("-sDEVICE=pdfwrite")
         .arg(format!("-sOutputFile={output_path}"))
-        .arg(&file_path)
+        .arg(file_path)
         .spawn();
 
     child.unwrap().wait().unwrap();
+
+    *compression_complete = true;
 }
