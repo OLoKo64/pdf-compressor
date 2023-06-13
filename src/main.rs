@@ -58,7 +58,7 @@ impl Default for MyApp {
         Self {
             picked_path: None,
             output_path: None,
-            pdf_settings: PdfSettings::Screen,
+            pdf_settings: PdfSettings::Ebook,
             image_dpi: 150,
             is_processing: Arc::new(RwLock::new(false)),
             compression_complete: Arc::new(RwLock::new(false)),
