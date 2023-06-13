@@ -1,6 +1,12 @@
 use eframe::egui;
 use std::process::Command;
 
+#[cfg(target_os = "linux")]
+const COMMAND: &str = "gs";
+
+#[cfg(target_os = "windows")]
+const COMMAND: &str = "gswin64";
+
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
@@ -138,13 +144,7 @@ fn run(
 ) {
     // Some options: https://gist.github.com/ahmed-musallam/27de7d7c5ac68ecbd1ed65b6b48416f9
 
-    #[cfg(target_os = "linux")]
-    let command = "gs";
-
-    #[cfg(target_os = "windows")]
-    let command = "gswin64";
-
-    let child = Command::new(command)
+    let child = Command::new(COMMAND)
         .arg("-dBATCH")
         .arg("-dNOPAUSE")
         // .arg("-q")
