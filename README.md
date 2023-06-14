@@ -2,6 +2,8 @@
 
 A simple PDF compressor using [egui](https://github.com/emilk/egui) and [Ghostscript](https://www.ghostscript.com/).
 
+![image](https://github.com/OLoKo64/pdf-compressor/assets/49915167/cd76d051-9773-4a13-8f08-8925477f74fb)
+
 ## Dependencies
 
 ### Ubuntu
